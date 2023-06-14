@@ -1,23 +1,27 @@
 from PCF8574 import PCF8574_GPIO
 from Adafruit_LCD1602 import Adafruit_CharLCD
 from BMS_DHT import BMS_DHT
-
+from motion import MOTION
 from time import sleep
 
 
 class BMS_lcd:
-	def __init__(self, temp,door, light, hvac, lcd):
+	def __init__(self, temp,door, hvac, lcd):
 		self.temp = temp
 		self.door = door
-		self.light = light
+		self.light = 'OFF'
 		self.hvac = hvac
 		self.lcd = lcd
 		self.dht = BMS_DHT()
+		self.motion = MOTION()
 		self.feelsLike = self.dht.read()
-		print(self.dht.read())
+		#print(self.dht.read())
 		
 	def default(self):
 		self.emergency()
+		self.lights(self.motion.status)
+		#self.feelsLike = self.dht.read()
+		self.doors('SAFE') #Add in event detection for door open/close
 		self.lcd.clear()
 		self.lcd.message('{0}'.format(self.temp))
 		self.lcd.message('/')
@@ -52,9 +56,9 @@ class BMS_lcd:
 		
 	def lights(self,lightChg):
 		self.emergency()
-		self.lcd.clear()
 		if self.light == lightChg:
 			return
+		self.lcd.clear()	
 		self.light = lightChg
 		if lightChg == 'ON':
 			self.lcd.message('LIGHTS ON')
@@ -94,17 +98,20 @@ PCF8574A_address = 0x3F  # I2C address of the PCF8574A chip.
 def loop():
 	mcp.output(3,1)
 	lcd.begin(16,2)
-	test = BMS_lcd(90,'SAFE','ON','COOL',lcd) #Default door state should be closed(check sensor), AC set to 75(have hvac decide cool/heat) lights off
+	test = BMS_lcd(90,'SAFE','COOL',lcd) #Default door state should be closed(check sensor), AC set to 75(have hvac decide cool/heat) lights off
+	#a = MOTION()
 	while(True):
 		
-		
+		#print("Light Status:" + '{}'.format(a.status))
 		lcd.setCursor(0,0)
 		lcd.cursor()
-		sleep(1)
+		#sleep(1)
+		#test.default()
+		#print("Light Status:" + '{}'.format(a.status))
+		#test.doors('OPEN')
 		test.default()
-		test.doors('OPEN')
-		test.default()
-		test.doors('SAFE')
+		#print("Light Status:" + '{}'.format(a.status))
+		#test.doors('SAFE')
 		
 		
 		

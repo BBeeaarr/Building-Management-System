@@ -2,7 +2,7 @@ import RPi.GPIO as GPIO
 import time
 import Freenove_DHT as DHT
 from threading import Thread
-from cimis import CIMIS
+#from cimis import CIMIS
 DHTPin = 11
 GPIO.setwarnings(False)
 
@@ -11,15 +11,15 @@ class BMS_DHT:
 		self.last3 = [0] * 3
 		self.count = 0
 		self.dht = DHT.DHT(DHTPin)
-		self.humidity = CIMIS()
+		#self.humidity = CIMIS()
 		self.avgTemp = 70
 		t1 = Thread(target =self.measure,daemon=True)
 		t1.start()
 		
 	def read(self):
-		print('Temo:'+'{}'.format(self.avgTemp))
-		print('Humidity'+'{}'.format(.05*(float(self.humidity.cimis))))
-		return (self.avgTemp + .05*float(self.humidity.cimis))
+		#print('Temo:'+'{}'.format(self.avgTemp))
+		#print('Humidity'+'{}'.format(.05*(float(self.humidity.cimis))))
+		return (self.avgTemp)# + .05*float(self.humidity.cimis))
 		
 	def measure(self):
 		while(True):
