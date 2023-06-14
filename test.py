@@ -1,22 +1,27 @@
 from PCF8574 import PCF8574_GPIO
 from Adafruit_LCD1602 import Adafruit_CharLCD
+from BMS_DHT import BMS_DHT
 
 from time import sleep
 
+
 class BMS_lcd:
-	def __init__(self, temp, feelsLike, door, light, hvac, lcd):
+	def __init__(self, temp,door, light, hvac, lcd):
 		self.temp = temp
-		self.feelsLike = feelsLike
 		self.door = door
 		self.light = light
 		self.hvac = hvac
 		self.lcd = lcd
+		self.dht = BMS_DHT()
+		self.feelsLike = self.dht.read()
+		print(self.dht.read())
 		
 	def default(self):
+		self.emergency()
 		self.lcd.clear()
 		self.lcd.message('{0}'.format(self.temp))
 		self.lcd.message('/')
-		self.lcd.message('{0}'.format(self.feelsLike))
+		self.lcd.message('{:.0f}'.format(self.feelsLike))
 		self.lcd.setCursor(8,0)
 		self.lcd.message('D:')
 		self.lcd.message(self.door + '\n')
@@ -26,7 +31,8 @@ class BMS_lcd:
 		sleep(3)
 		self.lcd.clear()
 		
-	def doors(self,doorChg): #CHANGE TO CALL TEMPERATURE SENSOR TO DETECT HEAT/AC
+	def doors(self,doorChg): 
+		self.emergency()
 		if self.door == doorChg:
 			return
 		self.door = doorChg
@@ -36,11 +42,16 @@ class BMS_lcd:
 			self.hvac = 'OFF'
 		else:
 			self.lcd.message('DOOR/WIND CLOSED\nHVAC RESUME')
-			self.hvac = 'COOL' #DYNAMICALLY UPDATE ACCORDING TO DESIRED TEMP
+			if (self.dht.read() > self.temp + 3):	
+				self.hvac = 'COOL'
+			elif (self.dht.read() < self.temp - 3):
+				self.hvac = 'HEAT'
+			self.feelsLike = self.dht.read() 
 		sleep(3)
 		self.lcd.clear()
 		
 	def lights(self,lightChg):
+		self.emergency()
 		self.lcd.clear()
 		if self.light == lightChg:
 			return
@@ -52,8 +63,9 @@ class BMS_lcd:
 		sleep(3)
 		self.lcd.clear()	
 	
-	def ac(self,hvacChg): #CHANGE TO CALL TEMPERATURE SENSOR TO DETECT HEAT/AC
-		if self.hvac == hvacChg:
+	def ac(self,hvacChg): #CHANGE TO CALL TEMPERATURE SENSOR TO DETECT HEAT/AC, ADD BUTTON TO SET AC
+		self.emergency()
+		if (self.hvac == hvacChg):
 			return
 		self.lcd.clear()
 		self.hvac = hvacChg
@@ -62,16 +74,16 @@ class BMS_lcd:
 		elif self.hvac == 'HEAT':
 			self.lcd.message('HVAC CHANGE\nHEAT ON')
 		else:
-			self.lcd.message('HVAC CHANEG\nOFF')
+			self.lcd.message('HVAC CHANGE\nOFF')
 		sleep(3)
 		self.lcd.clear()
 		
-	def emergency(self): #UPDATE TO CHECK TEMPERATURE SENSOR CONTINUOUSLY
+	def emergency(self): 
 		self.lcd.clear()
-		while(self.temp > 95):
+		while(self.dht.read() > 95):
+			self.lcd.clear()
 			self.lcd.message('It\'s gettin \nhot in here!')
 			sleep(3)
-			self.temp = 75
 			
 				
 PCF8574_address = 0x27  # I2C address of the PCF8574 chip.
@@ -82,18 +94,18 @@ PCF8574A_address = 0x3F  # I2C address of the PCF8574A chip.
 def loop():
 	mcp.output(3,1)
 	lcd.begin(16,2)
-	test = BMS_lcd(75,77,'SAFE','ON','COOL',lcd)
+	test = BMS_lcd(90,'SAFE','ON','COOL',lcd) #Default door state should be closed(check sensor), AC set to 75(have hvac decide cool/heat) lights off
 	while(True):
+		
+		
 		lcd.setCursor(0,0)
 		lcd.cursor()
+		sleep(1)
 		test.default()
 		test.doors('OPEN')
-		test.lights('OFF')
 		test.default()
 		test.doors('SAFE')
-		test.ac('HEAT')
-		test.temp = 100
-		test.emergency()
+		
 		
 		
 		
@@ -125,4 +137,5 @@ if __name__ == "__main__":
 	except KeyboardInterrupt:
 		print("exiting\n")
 		destroy()
+		
 		
