@@ -3,27 +3,29 @@ from Adafruit_LCD1602 import Adafruit_CharLCD
 from BMS_DHT import BMS_DHT
 from motion import MOTION
 from time import sleep
-
+from hvacbuttons import TEMP_SETTING
+from door import DOOR
+import RPi.GPIO as GPIO
 
 class BMS_lcd:
-	def __init__(self, temp,door, hvac, lcd):
-		self.temp = temp
-		self.door = door
+	def __init__(self,lcd):
+		self.door = 'SAFE'
+		self.doorChange = DOOR()
 		self.light = 'OFF'
-		self.hvac = hvac
+		self.hvac = 'OFF'
 		self.lcd = lcd
 		self.dht = BMS_DHT()
 		self.motion = MOTION()
-		self.feelsLike = self.dht.read()
-		#print(self.dht.read())
+		self.temp = TEMP_SETTING(75)
 		
 	def default(self):
 		self.emergency()
+		self.doors(self.doorChange.doorStatus)
 		self.lights(self.motion.status)
-		#self.feelsLike = self.dht.read()
-		self.doors('SAFE') #Add in event detection for door open/close
+		self.ac()
+		self.feelsLike = self.dht.read()
 		self.lcd.clear()
-		self.lcd.message('{0}'.format(self.temp))
+		self.lcd.message('{0}'.format(self.temp.desiredTemp))
 		self.lcd.message('/')
 		self.lcd.message('{:.0f}'.format(self.feelsLike))
 		self.lcd.setCursor(8,0)
@@ -39,18 +41,21 @@ class BMS_lcd:
 		self.emergency()
 		if self.door == doorChg:
 			return
-		self.door = doorChg
 		self.lcd.clear()
-		if doorChg == 'OPEN':
+		if self.doorChange.doorStatus == 'OPEN':
 			self.lcd.message('DOOR/WIND OPEN\nHVAC HALTED')
 			self.hvac = 'OFF'
+			self.door = self.doorChange.doorStatus
 		else:
-			self.lcd.message('DOOR/WIND CLOSED\nHVAC RESUME')
-			if (self.dht.read() > self.temp + 3):	
-				self.hvac = 'COOL'
-			elif (self.dht.read() < self.temp - 3):
-				self.hvac = 'HEAT'
 			self.feelsLike = self.dht.read() 
+			self.lcd.message('DOOR/WIND CLOSED\nHVAC RESUME')
+			if (self.dht.read() > self.temp.desiredTemp + 3):	
+				self.hvac = 'COOL'
+			elif (self.dht.read() < self.temp.desiredTemp - 3):
+				self.hvac = 'HEAT'
+			else:
+				self.hvac = 'HEAT'
+			self.door = self.doorChange.doorStatus
 		sleep(3)
 		self.lcd.clear()
 		
@@ -67,18 +72,23 @@ class BMS_lcd:
 		sleep(3)
 		self.lcd.clear()	
 	
-	def ac(self,hvacChg): #CHANGE TO CALL TEMPERATURE SENSOR TO DETECT HEAT/AC, ADD BUTTON TO SET AC
+	def ac(self):
 		self.emergency()
-		if (self.hvac == hvacChg):
+		self.feelsLike = self.dht.read()
+		if (self.door == 'OPEN'):
 			return
-		self.lcd.clear()
-		self.hvac = hvacChg
-		if self.hvac == 'COOL':
-			self.lcd.message('HVAC CHANGE\nAC ON')
-		elif self.hvac == 'HEAT':
+		if (self.temp.desiredTemp < (self.feelsLike + 3)) and (self.temp.desiredTemp > (self.feelsLike -3)):
+			return	
+		if self.temp.desiredTemp > (self.feelsLike + 3):
+			if(self.hvac == 'HEAT'):
+				return
 			self.lcd.message('HVAC CHANGE\nHEAT ON')
-		else:
-			self.lcd.message('HVAC CHANGE\nOFF')
+			self.hvac = 'HEAT'
+		elif self.temp.desiredTemp < (self.feelsLike - 3):
+			if(self.hvac == 'COOL'):
+				return
+			self.lcd.message('HVAC CHANGE\nAC ON')
+			self.hvac = 'COOL'
 		sleep(3)
 		self.lcd.clear()
 		
@@ -98,20 +108,11 @@ PCF8574A_address = 0x3F  # I2C address of the PCF8574A chip.
 def loop():
 	mcp.output(3,1)
 	lcd.begin(16,2)
-	test = BMS_lcd(90,'SAFE','COOL',lcd) #Default door state should be closed(check sensor), AC set to 75(have hvac decide cool/heat) lights off
-	#a = MOTION()
+	test = BMS_lcd(lcd) #Default door state should be closed(check sensor), AC set to 75(have hvac decide cool/heat) lights off
+
+	
 	while(True):
-		
-		#print("Light Status:" + '{}'.format(a.status))
-		lcd.setCursor(0,0)
-		lcd.cursor()
-		#sleep(1)
-		#test.default()
-		#print("Light Status:" + '{}'.format(a.status))
-		#test.doors('OPEN')
 		test.default()
-		#print("Light Status:" + '{}'.format(a.status))
-		#test.doors('SAFE')
 		
 		
 		
@@ -121,6 +122,9 @@ def loop():
 
 def destroy():
     lcd.clear()
+    mcp.output(3,0)
+    GPIO.cleanup()
+    
 
 try:
 	# Create PCF8574 GPIO adapter.
