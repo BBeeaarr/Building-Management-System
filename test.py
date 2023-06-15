@@ -5,6 +5,7 @@ from motion import MOTION
 from time import sleep
 from hvacbuttons import TEMP_SETTING
 from door import DOOR
+from billing import HVAC_BILL
 import RPi.GPIO as GPIO
 
 class BMS_lcd:
@@ -17,6 +18,9 @@ class BMS_lcd:
 		self.dht = BMS_DHT()
 		self.motion = MOTION()
 		self.temp = TEMP_SETTING(75)
+		self.bill = HVAC_BILL(self.hvac)
+		self.energyCost = 0
+		self.energyUse = 0
 		
 	def default(self):
 		self.emergency()
@@ -46,18 +50,23 @@ class BMS_lcd:
 			self.lcd.message('DOOR/WIND OPEN\nHVAC HALTED')
 			self.hvac = 'OFF'
 			self.door = self.doorChange.doorStatus
+			self.bill.update(self.hvac)
 		else:
 			self.feelsLike = self.dht.read() 
 			self.lcd.message('DOOR/WIND CLOSED\nHVAC RESUME')
 			if (self.dht.read() > self.temp.desiredTemp + 3):	
 				self.hvac = 'COOL'
+				self.bill.update(self.hvac)
 			elif (self.dht.read() < self.temp.desiredTemp - 3):
 				self.hvac = 'HEAT'
+				self.bill.update(self.hvac)
 			else:
 				self.hvac = 'HEAT'
+				self.bill.update(self.hvac)
 			self.door = self.doorChange.doorStatus
 		sleep(3)
-		self.lcd.clear()
+		self.lcd.clear
+		self.energyBill()
 		
 	def lights(self,lightChg):
 		self.emergency()
@@ -84,20 +93,35 @@ class BMS_lcd:
 				return
 			self.lcd.message('HVAC CHANGE\nHEAT ON')
 			self.hvac = 'HEAT'
+			self.bill.update(self.hvac)
 		elif self.temp.desiredTemp < (self.feelsLike - 3):
 			if(self.hvac == 'COOL'):
 				return
 			self.lcd.message('HVAC CHANGE\nAC ON')
 			self.hvac = 'COOL'
+			self.bill.update(self.hvac)
 		sleep(3)
 		self.lcd.clear()
+		self.energyBill()
 		
 	def emergency(self): 
 		self.lcd.clear()
 		while(self.dht.read() > 95):
+			self.bill.update('OFF')
 			self.lcd.clear()
 			self.lcd.message('It\'s gettin \nhot in here!')
-			sleep(3)
+			self.bill.emergencyON()
+			self.bill.emergencyOFF()
+	
+	def energyBill(self):
+		self.energyUse = 36*(self.bill.redTime / 3600) + 18*(self.bill.blueTime / 3600)
+		self.energyCost = self.energyUse * .5
+		self.lcd.clear()
+		self.lcd.message('energy: ' + '{:.1f}'.format(self.energyUse) + 'KWh')
+		self.lcd.message('\ncost: $' + '{:.1f}'.format(self.energyCost))
+		sleep(3)
+		self.lcd.clear()
+		
 			
 				
 PCF8574_address = 0x27  # I2C address of the PCF8574 chip.
@@ -109,7 +133,6 @@ def loop():
 	mcp.output(3,1)
 	lcd.begin(16,2)
 	test = BMS_lcd(lcd) #Default door state should be closed(check sensor), AC set to 75(have hvac decide cool/heat) lights off
-
 	
 	while(True):
 		test.default()
